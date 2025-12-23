@@ -20,7 +20,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 # Build the project.
 FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
+COPY --from=chef /opt/foundry/recipe.json recipe.json
 
 RUN --mount=type=cache,target=/root/.cargo/registry --mount=type=cache,target=/root/.cargo/git --mount=type=cache,target=/opt/foundry/target \
     source $HOME/.profile && cargo build --release --features anvil/js-tracer,cast/aws-kms,cast/gcp-kms,forge/aws-kms,forge/gcp-kms \
