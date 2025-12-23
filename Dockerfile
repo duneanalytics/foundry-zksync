@@ -37,8 +37,10 @@ RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/out/* /usr/local/bin/
 
 RUN groupadd -g 1000 foundry && \
-    useradd -m -u 1000 -g foundry foundry
+    useradd -m -u 1000 -g foundry foundry && \
+    git config --global --add safe.directory '*'
 USER foundry
+RUN git config --global --add safe.directory '*'
 
 ENTRYPOINT ["/bin/sh", "-c"]
 
