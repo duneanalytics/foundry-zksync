@@ -1,7 +1,7 @@
 //! Contains various definitions and items related to deploy-time linking
 //! for zksync
 
-use std::{collections::HashMap, path::Path};
+use std::collections::HashMap;
 
 use alloy_primitives::{Address, B256, Bytes, TxKind, U256, keccak256};
 use alloy_zksync::contracts::l2::contract_deployer::CONTRACT_DEPLOYER_ADDRESS;
@@ -39,11 +39,11 @@ impl ZksyncExecutorStrategyRunner {
         &self,
         ctx: &mut dyn ExecutorStrategyContext,
         config: &Config,
-        root: &Path,
         input: &ProjectCompileOutput,
         deployer: Address,
     ) -> Result<LinkOutput, LinkerError> {
-        let evm_link = EvmExecutorStrategyRunner.link(ctx, config, root, input, deployer)?;
+        let root = &config.root;
+        let evm_link = EvmExecutorStrategyRunner.link(ctx, config, input, deployer)?;
 
         let ctx = get_context(ctx);
         let Some(input) = ctx.compilation_output.as_ref() else {
@@ -190,6 +190,11 @@ impl ZksyncExecutorStrategyRunner {
             .chain(evm_link.linked_contracts)
             .collect();
 
+        // NOTE(zk): Currently unsupported, so we initialize it with the empty solar compiler.
+        let analysis = solar::sema::Compiler::new(
+            solar::interface::Session::builder().with_stderr_emitter().build(),
+        );
+
         Ok(LinkOutput {
             deployable_contracts: evm_link.deployable_contracts,
             revert_decoder: evm_link.revert_decoder,
@@ -197,6 +202,7 @@ impl ZksyncExecutorStrategyRunner {
             linked_contracts,
             libs_to_deploy: evm_link.libs_to_deploy,
             libraries: evm_link.libraries,
+            analysis,
         })
     }
 
@@ -273,6 +279,20 @@ impl ZksyncExecutorStrategyRunner {
         // persistent across fork swaps in forking mode
         executor.backend_mut().add_persistent_account(address);
         tracing::debug!(%address, "deployed contract");
+
+        // Persist factory deps deployed during this stage directly in the cheatcode inspector so
+        // they are available during normal execution.
+        if let Some(cheatcodes) = executor.inspector.cheatcodes.as_mut() {
+            let factory_deps = executor
+                .backend
+                .strategy
+                .runner
+                .zksync_get_persisted_factory_deps(executor.backend.strategy.context.as_mut());
+            cheatcodes
+                .strategy
+                .runner
+                .zksync_persist_factory_deps(cheatcodes.strategy.context.as_mut(), factory_deps);
+        }
 
         let mut request = TransactionMaybeSigned::new(Default::default());
         let unsigned = request.as_unsigned_mut().unwrap();

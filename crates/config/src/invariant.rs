@@ -39,6 +39,10 @@ pub struct InvariantConfig {
     pub show_solidity: bool,
     /// When enabled, filters all addresses below 2^16, as they are reserved in zkSync.
     pub no_zksync_reserved_addresses: bool,
+    /// Maximum time (in seconds) between generated txs.
+    pub max_time_delay: Option<u32>,
+    /// Maximum number of blocks elapsed between generated txs.
+    pub max_block_delay: Option<u32>,
 }
 
 impl Default for InvariantConfig {
@@ -58,6 +62,8 @@ impl Default for InvariantConfig {
             timeout: None,
             show_solidity: false,
             no_zksync_reserved_addresses: false,
+            max_time_delay: None,
+            max_block_delay: None,
         }
     }
 }
@@ -66,20 +72,9 @@ impl InvariantConfig {
     /// Creates invariant configuration to write failures in `{PROJECT_ROOT}/cache/fuzz` dir.
     pub fn new(cache_dir: PathBuf) -> Self {
         Self {
-            runs: 256,
-            depth: 500,
-            fail_on_revert: false,
-            call_override: false,
-            dictionary: FuzzDictionaryConfig { dictionary_weight: 80, ..Default::default() },
-            shrink_run_limit: 5000,
-            max_assume_rejects: 65536,
-            gas_report_samples: 256,
-            corpus: FuzzCorpusConfig::default(),
             failure_persist_dir: Some(cache_dir),
-            show_metrics: true,
-            timeout: None,
-            show_solidity: false,
             no_zksync_reserved_addresses: false,
+            ..Default::default()
         }
     }
 }

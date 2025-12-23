@@ -8,7 +8,7 @@ use alloy_rpc_types::{
 };
 use foundry_cheatcodes::{
     Broadcast, BroadcastableTransaction, BroadcastableTransactions, Cheatcodes, CheatcodesExecutor,
-    CheatsConfig, CheatsCtxt, CommonCreateInput, DynCheatcode, Ecx, Result,
+    CheatsConfig, CheatsCtxt, CommonCreateInput, DynCheatcode, Result,
     Vm::{self, AccountAccess, AccountAccessKind, ChainInfo, StorageAccess},
     journaled_account,
     strategy::{
@@ -22,7 +22,7 @@ use foundry_evm::{
     backend::{DatabaseError, LocalForkId},
     constants::{DEFAULT_CREATE2_DEPLOYER, DEFAULT_CREATE2_DEPLOYER_CODE},
 };
-use foundry_evm_core::backend::DatabaseExt;
+use foundry_evm_core::{ContextExt, Ecx, backend::DatabaseExt};
 use foundry_zksync_core::{
     ACCOUNT_CODE_STORAGE_ADDRESS, CONTRACT_DEPLOYER_ADDRESS, DEFAULT_CREATE2_DEPLOYER_ZKSYNC,
     KNOWN_CODES_STORAGE_ADDRESS, L2_BASE_TOKEN_ADDRESS, NONCE_HOLDER_ADDRESS, PaymasterParams,
@@ -48,7 +48,7 @@ use revm::{
 };
 use tracing::{debug, error, info, trace, warn};
 use zksync_types::{
-    CURRENT_VIRTUAL_BLOCK_INFO_POSITION, SYSTEM_CONTEXT_ADDRESS,
+    CURRENT_VIRTUAL_BLOCK_INFO_POSITION, H256, SYSTEM_CONTEXT_ADDRESS,
     block::{pack_block_info, unpack_block_info},
     utils::{decompose_full_nonce, nonces_to_full_nonce},
 };
@@ -546,14 +546,11 @@ impl CheatcodeInspectorStrategyExt for ZksyncCheatcodeInspectorStrategyRunner {
             return None;
         }
 
+        let (db, journal, _) = ecx.as_db_env_and_journal();
         if let Some(CreateScheme::Create) = input.scheme() {
             let caller = input.caller();
-            let nonce = ecx
-                .journaled_state
-                .load_account(input.caller())
-                .expect("to load caller account")
-                .info
-                .nonce;
+            let nonce =
+                journal.load_account(db, caller).expect("to load caller account").info.nonce;
             let address = caller.create(nonce);
             if ecx
                 .journaled_state
@@ -681,7 +678,7 @@ impl CheatcodeInspectorStrategyExt for ZksyncCheatcodeInspectorStrategyRunner {
                         foundry_cheatcodes::handle_expect_emit(
                             state,
                             &log,
-                            &mut Default::default(),
+                            Some(&mut Default::default()),
                         );
                     }
                 }
@@ -873,7 +870,7 @@ impl CheatcodeInspectorStrategyExt for ZksyncCheatcodeInspectorStrategyRunner {
                             foundry_cheatcodes::handle_expect_emit(
                                 state,
                                 &log,
-                                &mut Default::default(),
+                                Some(&mut Default::default()),
                             );
                         }
                     }
@@ -905,6 +902,8 @@ impl CheatcodeInspectorStrategyExt for ZksyncCheatcodeInspectorStrategyRunner {
                                     gas,
                                 },
                                 memory_offset: call.return_memory_offset.clone(),
+                                was_precompile_called: false,
+                                precompile_call_logs: vec![],
                             }),
                             _ => Some(CallOutcome {
                                 result: InterpreterResult {
@@ -913,6 +912,8 @@ impl CheatcodeInspectorStrategyExt for ZksyncCheatcodeInspectorStrategyRunner {
                                     gas,
                                 },
                                 memory_offset: call.return_memory_offset.clone(),
+                                was_precompile_called: false,
+                                precompile_call_logs: vec![],
                             }),
                         }
                     }
@@ -925,6 +926,8 @@ impl CheatcodeInspectorStrategyExt for ZksyncCheatcodeInspectorStrategyRunner {
                                 gas,
                             },
                             memory_offset: call.return_memory_offset.clone(),
+                            was_precompile_called: false,
+                            precompile_call_logs: vec![],
                         })
                     }
                     ExecutionResult::Halt { .. } => Some(CallOutcome {
@@ -934,6 +937,8 @@ impl CheatcodeInspectorStrategyExt for ZksyncCheatcodeInspectorStrategyRunner {
                             gas,
                         },
                         memory_offset: call.return_memory_offset.clone(),
+                        was_precompile_called: false,
+                        precompile_call_logs: vec![],
                     }),
                 }
             }
@@ -948,6 +953,8 @@ impl CheatcodeInspectorStrategyExt for ZksyncCheatcodeInspectorStrategyRunner {
                         gas,
                     },
                     memory_offset: call.return_memory_offset.clone(),
+                    was_precompile_called: false,
+                    precompile_call_logs: vec![],
                 })
             }
         }
@@ -992,6 +999,18 @@ impl CheatcodeInspectorStrategyExt for ZksyncCheatcodeInspectorStrategyRunner {
             foundry_zksync_core::increment_tx_nonce(broadcast.new_origin, ecx);
             debug!("incremented zksync nonce after broadcastable create");
         }
+    }
+
+    /// Persist factory deps to make them available at execution time.
+    /// This might be necessary for any factory deps deployed with libraries.
+    fn zksync_persist_factory_deps(
+        &self,
+        ctx: &mut dyn CheatcodeInspectorStrategyContext,
+        factory_deps: HashMap<B256, Vec<u8>>,
+    ) {
+        let ctx = get_context(ctx);
+        ctx.persisted_factory_deps
+            .extend(factory_deps.into_iter().map(|(hash, bytecode)| (H256(hash.0), bytecode)));
     }
 }
 

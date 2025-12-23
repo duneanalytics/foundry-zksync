@@ -1,5 +1,99 @@
 # Changelog
 
+## [0.1.2](https://github.com/matter-labs/foundry-zksync/compare/foundry-zksync-v0.1.1...foundry-zksync-v0.1.2) (2025-12-22)
+
+
+### Features
+
+* **`foundryup`:** add Tempo support ([#12775](https://github.com/matter-labs/foundry-zksync/issues/12775)) ([c8096cf](https://github.com/matter-labs/foundry-zksync/commit/c8096cfa17c7c22672db57146df66e047b699793))
+* **cast:** `--replay-system-txes` / `--sys` arg to cast run system txes ([#12853](https://github.com/matter-labs/foundry-zksync/issues/12853)) ([8c1260a](https://github.com/matter-labs/foundry-zksync/commit/8c1260ae9ad7e24fa9124d282970aa9c04556d66))
+* **cast:** add support for raw transaction data with --data flag in send command, closes ([#12660](https://github.com/matter-labs/foundry-zksync/issues/12660)) ([f983f32](https://github.com/matter-labs/foundry-zksync/commit/f983f32136f899b2173ba57ae5fb87826e2e703d))
+* **cast:** strip WalletOpts and EtherscanOpts from cast subcommands that dont expect a signer or need etherscan api ([#12705](https://github.com/matter-labs/foundry-zksync/issues/12705)) ([b4d888b](https://github.com/matter-labs/foundry-zksync/commit/b4d888b20f874f9936687cbac507871e94aa0a1c))
+* **ci:** lint shell scripts ([#12797](https://github.com/matter-labs/foundry-zksync/issues/12797)) ([c32ac2a](https://github.com/matter-labs/foundry-zksync/commit/c32ac2a0f0b7b362b245ebaee1730c8aa5e25d79))
+* **forge selectors:** cache selectors from abis ([#12742](https://github.com/matter-labs/foundry-zksync/issues/12742)) ([a06ef9d](https://github.com/matter-labs/foundry-zksync/commit/a06ef9d8d361b8a627909815572173bc6bba2f95))
+* **forge:** add `--network tempo` flag to `forge init` ([#12819](https://github.com/matter-labs/foundry-zksync/issues/12819)) ([1969235](https://github.com/matter-labs/foundry-zksync/commit/1969235be113bf47be71b799fdf15ec83a12e677))
+* **primitives:** `get_deposit_tx_parts` helper ([#12808](https://github.com/matter-labs/foundry-zksync/issues/12808)) ([c21d269](https://github.com/matter-labs/foundry-zksync/commit/c21d2692ec1869e36baf1ef064768ddcdf7a39fe))
+
+
+### Bug Fixes
+
+* add assertion on existence of `tempo-std` in template test ([#12833](https://github.com/matter-labs/foundry-zksync/issues/12833)) ([fda3fec](https://github.com/matter-labs/foundry-zksync/commit/fda3fec1f6216127d0969a1270f92759d576ae09))
+* add plasma verifier err msg ([#12790](https://github.com/matter-labs/foundry-zksync/issues/12790)) ([48f27e5](https://github.com/matter-labs/foundry-zksync/commit/48f27e5ab3b73f76155e6b7c6efd91d80f3d655b))
+* **anvil:** insufficient allowance → insufficient balance ([#12855](https://github.com/matter-labs/foundry-zksync/issues/12855)) ([1c1ae8b](https://github.com/matter-labs/foundry-zksync/commit/1c1ae8b29e4f03fefe2f5d0fb341bc2ba3ab6552))
+* **anvil:** propagate gas estimation errors  ([#12813](https://github.com/matter-labs/foundry-zksync/issues/12813)) ([45dbf96](https://github.com/matter-labs/foundry-zksync/commit/45dbf96062de0bef240e2f6431de2062cddfb0fb))
+* bump svm-rs and builds ([f983f32](https://github.com/matter-labs/foundry-zksync/commit/f983f32136f899b2173ba57ae5fb87826e2e703d))
+* **forge:** fail compilation on unresolved imports ([#12848](https://github.com/matter-labs/foundry-zksync/issues/12848)) ([ae1fa39](https://github.com/matter-labs/foundry-zksync/commit/ae1fa396874034b4bc88a097be6524606364da96))
+* **forge:** failing tests trigger early exit without --fail-fast ([#12785](https://github.com/matter-labs/foundry-zksync/issues/12785)) ([f4f02e4](https://github.com/matter-labs/foundry-zksync/commit/f4f02e4c62ceae13b042fbfdf84ba4cf1995a3ae))
+* **foundryup:** strip leading backslash from sha256sum ([#12827](https://github.com/matter-labs/foundry-zksync/issues/12827)) ([5ed4d5e](https://github.com/matter-labs/foundry-zksync/commit/5ed4d5e01a67c222c66908c5e21f48048688e028))
+* **foundryup:** strip leading backslash from sha256sum on Windows ([5ed4d5e](https://github.com/matter-labs/foundry-zksync/commit/5ed4d5e01a67c222c66908c5e21f48048688e028))
+* **primitives:** `FoundryTransactionRequest` based on `WithOtherFields<TransactionRequest>` ([#12786](https://github.com/matter-labs/foundry-zksync/issues/12786)) ([04d9e9d](https://github.com/matter-labs/foundry-zksync/commit/04d9e9dd0130ee833dfc161c058b7652b458d478))
+* remove redundant project clone in flatten call ([#12825](https://github.com/matter-labs/foundry-zksync/issues/12825)) ([354f7ca](https://github.com/matter-labs/foundry-zksync/commit/354f7ca805fe68887ca1252ea8b3873610f117c0))
+* resolve incorrect historical states dump behavior ([f983f32](https://github.com/matter-labs/foundry-zksync/commit/f983f32136f899b2173ba57ae5fb87826e2e703d))
+* use ConversionError instead of unit type in receipt conversion ([#12824](https://github.com/matter-labs/foundry-zksync/issues/12824)) ([ff5f0a9](https://github.com/matter-labs/foundry-zksync/commit/ff5f0a921b34502f7a8b92c307c0e0cf662ec3e9))
+* **verify:** handle lack of trailing slash in verifier url ([#12806](https://github.com/matter-labs/foundry-zksync/issues/12806)) ([c6e4783](https://github.com/matter-labs/foundry-zksync/commit/c6e4783cc87ac4fb24fce8061ec04ded1c7fc5bb)), closes [#12802](https://github.com/matter-labs/foundry-zksync/issues/12802)
+
+## [0.1.1](https://github.com/matter-labs/foundry-zksync/compare/foundry-zksync-v0.1.0...foundry-zksync-v0.1.1) (2025-12-08)
+
+
+### Features
+
+* **cast:** add support for raw transaction data with --data flag in send command, closes ([#12660](https://github.com/matter-labs/foundry-zksync/issues/12660)) ([6a042e8](https://github.com/matter-labs/foundry-zksync/commit/6a042e8eb2f03c32ed3f5f3d9082a65fc1738dfa))
+
+
+### Bug Fixes
+
+* bump svm-rs and builds ([6a042e8](https://github.com/matter-labs/foundry-zksync/commit/6a042e8eb2f03c32ed3f5f3d9082a65fc1738dfa))
+* do not skip first line of error ([#1218](https://github.com/matter-labs/foundry-zksync/issues/1218)) ([3cfad84](https://github.com/matter-labs/foundry-zksync/commit/3cfad8400c3a6496d9020c076e9795e6ebbd02c2))
+
+## [0.1.0](https://github.com/matter-labs/foundry-zksync/compare/foundry-zksync-v0.0.32...foundry-zksync-v0.1.0) (2025-11-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **fmt:** PrecompileFactory::precompiles() now returns Vec<(Address, DynPrecompile)> instead of Vec<(Precompile, u64)>
+
+### Features
+
+* **anvil:** add `eth_fillTransaction` support ([#12595](https://github.com/matter-labs/foundry-zksync/issues/12595)) ([16cf9fb](https://github.com/matter-labs/foundry-zksync/commit/16cf9fb60791ae823752a8de9e4c871b7d9c0229))
+* **forge:** exit test gracefully if show progress ([32b52f4](https://github.com/matter-labs/foundry-zksync/commit/32b52f4d71251d23bf0f34db348523b4b030973d))
+
+
+### Bug Fixes
+
+* **`ci`:** ignore `number_prefix` is unmaintained in `cargo deny` ([#12598](https://github.com/matter-labs/foundry-zksync/issues/12598)) ([72e08ef](https://github.com/matter-labs/foundry-zksync/commit/72e08efe9fa21eb97db4a56bc0b5732735a3ddc4))
+* `eth_fillTransaction` response ([#12597](https://github.com/matter-labs/foundry-zksync/issues/12597)) ([005e737](https://github.com/matter-labs/foundry-zksync/commit/005e737318b486da181b31ecbd05b44732f0e344))
+* **common:** spurious detection off-by-one and add threshold test ([32b52f4](https://github.com/matter-labs/foundry-zksync/commit/32b52f4d71251d23bf0f34db348523b4b030973d))
+* **fmt:** asm inline if stmt ([32b52f4](https://github.com/matter-labs/foundry-zksync/commit/32b52f4d71251d23bf0f34db348523b4b030973d))
+* **npm:** forward termination signals to child process ([32b52f4](https://github.com/matter-labs/foundry-zksync/commit/32b52f4d71251d23bf0f34db348523b4b030973d))
+* persist factory_deps when deploying libs ([#1201](https://github.com/matter-labs/foundry-zksync/issues/1201)) ([761ad45](https://github.com/matter-labs/foundry-zksync/commit/761ad450bc425918d7ab70caa1ff10787943713f))
+* update progress on rejected runs ([32b52f4](https://github.com/matter-labs/foundry-zksync/commit/32b52f4d71251d23bf0f34db348523b4b030973d))
+
+## [0.0.32](https://github.com/matter-labs/foundry-zksync/compare/foundry-zksync-v0.0.31...foundry-zksync-v0.0.32) (2025-11-17)
+
+
+### Features
+
+* **forge:** no warning on external sections ([fe9888a](https://github.com/matter-labs/foundry-zksync/commit/fe9888a78694639ddb034d4a32d3630ade7111cf))
+* trigger release ([#1196](https://github.com/matter-labs/foundry-zksync/issues/1196)) ([a3ff87a](https://github.com/matter-labs/foundry-zksync/commit/a3ff87a049e9e4b01a60b1ac6d52a8771c9c2420))
+
+
+### Bug Fixes
+
+* **anvil:** return account info from db when requested block &gt; fork block ([fe9888a](https://github.com/matter-labs/foundry-zksync/commit/fe9888a78694639ddb034d4a32d3630ade7111cf))
+* ci and release pipeline ([#1199](https://github.com/matter-labs/foundry-zksync/issues/1199)) ([b2a1e8d](https://github.com/matter-labs/foundry-zksync/commit/b2a1e8d205b27c27f066fba7a75357ad50d4381b))
+* **fmt:** preserve cmnt possition in disabled lines ([fe9888a](https://github.com/matter-labs/foundry-zksync/commit/fe9888a78694639ddb034d4a32d3630ade7111cf))
+* **fmt:** return diff if source from stdin ([fe9888a](https://github.com/matter-labs/foundry-zksync/commit/fe9888a78694639ddb034d4a32d3630ade7111cf))
+* **forge:** consolidate flatten ([fe9888a](https://github.com/matter-labs/foundry-zksync/commit/fe9888a78694639ddb034d4a32d3630ade7111cf))
+* **forge:** do not warn on backward compatible solc_version key ([fe9888a](https://github.com/matter-labs/foundry-zksync/commit/fe9888a78694639ddb034d4a32d3630ade7111cf))
+* **forge:** support broadcast from vm.deployCode ([fe9888a](https://github.com/matter-labs/foundry-zksync/commit/fe9888a78694639ddb034d4a32d3630ade7111cf))
+
+## [0.0.31](https://github.com/matter-labs/foundry-zksync/compare/foundry-zksync-v0.0.30...foundry-zksync-v0.0.31) (2025-11-07)
+
+
+### Bug Fixes
+
+* Cap gas limit by balance in gas_params ([#1192](https://github.com/matter-labs/foundry-zksync/issues/1192)) ([763bbd3](https://github.com/matter-labs/foundry-zksync/commit/763bbd3304a4b3cd25119640d94d6fe69f0cbd1c))
+
 ## [0.0.30](https://github.com/matter-labs/foundry-zksync/compare/foundry-zksync-v0.0.29...foundry-zksync-v0.0.30) (2025-10-08)
 
 

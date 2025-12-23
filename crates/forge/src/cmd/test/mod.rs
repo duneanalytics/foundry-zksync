@@ -41,7 +41,7 @@ use foundry_config::{
 use foundry_debugger::Debugger;
 use foundry_evm::{
     opts::EvmOpts,
-    traces::{backtrace::BacktraceBuilder, identifier::TraceIdentifiers},
+    traces::{backtrace::BacktraceBuilder, identifier::TraceIdentifiers, prune_trace_depth},
 };
 use foundry_zksync_compilers::dual_compiled_contracts::DualCompiledContracts;
 use regex::Regex;
@@ -136,6 +136,10 @@ pub struct TestArgs {
     /// Suppress successful test traces and show only traces for failures.
     #[arg(long, short, env = "FORGE_SUPPRESS_SUCCESSFUL_TRACES", help_heading = "Display options")]
     suppress_successful_traces: bool,
+
+    /// Defines the depth of a trace
+    #[arg(long)]
+    trace_depth: Option<usize>,
 
     /// Output test results as JUnit XML report.
     #[arg(long, conflicts_with_all = ["quiet", "json", "gas_report", "summary", "list", "show_progress"], help_heading = "Display options")]
@@ -259,7 +263,8 @@ impl TestArgs {
         let (mut config, evm_opts) = self.load_config_and_evm_opts()?;
 
         // Install missing dependencies.
-        if install::install_missing_dependencies(&mut config) && config.auto_detect_remappings {
+        if install::install_missing_dependencies(&mut config).await && config.auto_detect_remappings
+        {
             // need to re-configure here to also catch additional remappings
             config = self.load_config()?;
         }
@@ -365,7 +370,7 @@ impl TestArgs {
             .networks(evm_opts.networks)
             .fail_fast(self.fail_fast)
             .set_coverage(coverage)
-            .build::<MultiCompiler>(project_root, output, zk_output, env, evm_opts, strategy)?;
+            .build::<MultiCompiler>(output, zk_output, env, evm_opts, strategy)?;
 
         let libraries = runner.libraries.clone();
         let mut outcome = self.run_tests_inner(runner, config, verbosity, filter, output).await?;
@@ -534,7 +539,8 @@ impl TestArgs {
             return Ok(TestOutcome::new(Some(runner), results, self.allow_failure));
         }
 
-        let remote_chain_id = runner.evm_opts.get_remote_chain_id().await;
+        let remote_chain =
+            if runner.fork.is_some() { runner.env.tx.chain_id.map(Into::into) } else { None };
         let known_contracts = runner.known_contracts.clone();
 
         let libraries = runner.libraries.clone();
@@ -551,10 +557,10 @@ impl TestArgs {
         // Set up trace identifiers.
         let mut identifier = TraceIdentifiers::new().with_local(&known_contracts);
 
-        // Avoid using etherscan for gas report as we decode more traces and this will be
+        // Avoid using external identifiers for gas report as we decode more traces and this will be
         // expensive.
         if !self.gas_report {
-            identifier = identifier.with_etherscan(&config, remote_chain_id)?;
+            identifier = identifier.with_external(&config, remote_chain)?;
         }
 
         // Build the trace decoder.
@@ -591,6 +597,7 @@ impl TestArgs {
         let mut backtrace_builder = None;
         for (contract_name, mut suite_result) in rx {
             let tests = &mut suite_result.test_results;
+            let has_tests = !tests.is_empty();
 
             // Clear the addresses and labels from previous test.
             decoder.clear_addresses();
@@ -608,7 +615,7 @@ impl TestArgs {
                 for warning in &suite_result.warnings {
                     sh_warn!("{warning}")?;
                 }
-                if !tests.is_empty() {
+                if has_tests {
                     let len = tests.len();
                     let tests = if len > 1 { "tests" } else { "test" };
                     sh_println!("Ran {len} {tests} for {contract_name}")?;
@@ -675,6 +682,11 @@ impl TestArgs {
 
                     if should_include {
                         decode_trace_arena(arena, &decoder).await;
+
+                        if let Some(trace_depth) = self.trace_depth {
+                            prune_trace_depth(arena, trace_depth);
+                        }
+
                         decoded_traces.push(render_trace_arena_inner(arena, false, verbosity > 4));
                     }
                 }
@@ -833,7 +845,7 @@ impl TestArgs {
             }
 
             // Print suite summary.
-            if !silent {
+            if !silent && has_tests {
                 sh_println!("{}", suite_result.summary())?;
             }
 
@@ -1058,6 +1070,12 @@ mod tests {
     fn fuzz_seed() {
         let args: TestArgs = TestArgs::parse_from(["foundry-cli", "--fuzz-seed", "0x10"]);
         assert!(args.fuzz_seed.is_some());
+    }
+
+    #[test]
+    fn depth_trace() {
+        let args: TestArgs = TestArgs::parse_from(["foundry-cli", "--trace-depth", "2"]);
+        assert!(args.trace_depth.is_some());
     }
 
     // <https://github.com/foundry-rs/foundry/issues/5913>

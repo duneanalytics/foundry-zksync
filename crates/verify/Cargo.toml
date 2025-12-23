@@ -18,7 +18,7 @@ foundry-config.workspace = true
 foundry-cli.workspace = true
 foundry-common.workspace = true
 foundry-evm.workspace = true
-foundry-evm-core.workspace = true
+foundry-evm-networks.workspace = true
 serde_json.workspace = true
 alloy-json-abi.workspace = true
 alloy-primitives.workspace = true
@@ -40,6 +40,7 @@ semver.workspace = true
 regex = { workspace = true, default-features = false }
 yansi.workspace = true
 itertools.workspace = true
+url.workspace = true
 
 # zk
 foundry-zksync-compilers.workspace = true

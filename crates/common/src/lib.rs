@@ -23,7 +23,6 @@ pub mod compile;
 pub mod constants;
 pub mod contracts;
 pub mod errors;
-pub mod evm;
 pub mod fs;
 pub mod iter;
 pub mod mapping_slots;
@@ -39,6 +38,7 @@ pub mod transactions;
 mod utils;
 pub mod version;
 
+pub use compile::Analysis;
 pub use constants::*;
 pub use contracts::*;
 pub use io::{Shell, shell, stdin};
