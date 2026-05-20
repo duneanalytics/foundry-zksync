@@ -23,6 +23,7 @@ use foundry_evm::{
     Env, EnvMut,
     constants::DEFAULT_CREATE2_DEPLOYER,
     core::AsEnvMut,
+    decode::RevertDecoder,
     executors::{TracingExecutor, strategy::ExecutorStrategy},
     opts::EvmOpts,
     traces::TraceMode,
@@ -327,9 +328,28 @@ pub fn deploy_contract(
         let result = executor.transact_with_env(env)?;
 
         trace!(transact_result = ?result.exit_reason);
+
+        if result.reverted {
+            let decoded_reason = if result.result.is_empty() {
+                String::new()
+            } else {
+                format!(": {}", RevertDecoder::default().decode(&result.result, result.exit_reason))
+            };
+            eyre::bail!(
+                "Failed to deploy contract via CREATE2 on fork at block{decoded_reason}.\n\
+                This typically happens when your local bytecode differs from what was actually deployed.\n\
+                Common causes:\n\
+                - Your contract source is not at the same commit used during deployment\n\
+                - Cached build artifacts are stale (try `forge clean && forge build`)\n\
+                - Compiler settings (optimizer, evm_version, via_ir) don't match the deployment"
+            );
+        }
+
         if result.result.len() != 20 {
             eyre::bail!(
-                "Failed to deploy contract on fork at block: call result is not exactly 20 bytes"
+                "Failed to deploy contract via CREATE2 on fork at block: deployer returned {} bytes instead of 20.\n\
+                This may indicate a bytecode mismatch - ensure your source code matches the deployed contract.",
+                result.result.len()
             );
         }
 
@@ -365,11 +385,8 @@ pub async fn get_runtime_codes(
             )
         })?;
 
-    let onchain_runtime_code = if let Some(block) = block {
-        provider.get_code_at(address).block_id(BlockId::number(block)).await?
-    } else {
-        provider.get_code_at(address).await?
-    };
+    let block_id = block.map_or_else(BlockId::latest, BlockId::number);
+    let onchain_runtime_code = provider.get_code_at(address).block_id(block_id).await?;
 
     Ok((fork_runtime_code, onchain_runtime_code))
 }

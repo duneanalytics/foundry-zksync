@@ -1,10 +1,10 @@
 use crate::{
     tx::{self, CastTxBuilder, SenderKind},
-    zksync::{NoopWallet, ZkTransactionOpts},
+    zksync::NoopWallet,
 };
 use alloy_eips::Encodable2718;
 use alloy_ens::NameOrAddress;
-use alloy_network::{NetworkWallet, TransactionBuilder};
+use alloy_network::{EthereumWallet, TransactionBuilder};
 use alloy_primitives::{Address, hex};
 use alloy_provider::Provider;
 use alloy_signer::Signer;
@@ -12,7 +12,7 @@ use alloy_zksync::wallet::ZksyncWallet;
 use clap::Parser;
 use eyre::Result;
 use foundry_cli::{
-    opts::{EthereumOpts, TransactionOpts},
+    opts::{EthereumOpts, TransactionOpts, ZkTransactionOpts},
     utils::{LoadConfig, get_provider},
 };
 use std::{path::PathBuf, str::FromStr};
@@ -161,7 +161,7 @@ impl MakeTxArgs {
             // Use "eth_signTransaction" to sign the transaction only works if the node/RPC has
             // unlocked accounts.
             let (tx, _) = tx_builder.build(config.sender).await?;
-            let signed_tx = provider.sign_transaction(tx.into_inner()).await?;
+            let signed_tx = provider.sign_transaction(tx.into_inner().into()).await?;
 
             sh_println!("{signed_tx}")?;
             return Ok(());
@@ -216,8 +216,7 @@ impl MakeTxArgs {
             if is_tempo {
                 let (ftx, _) = tx_builder.build(&signer).await?;
 
-                // Sign using NetworkWallet<FoundryNetwork>
-                let signed_tx = signer.sign_request(ftx).await?;
+                let signed_tx = ftx.build(&EthereumWallet::new(signer)).await?;
 
                 // Encode as 2718
                 let mut raw_tx = Vec::with_capacity(signed_tx.encode_2718_len());
@@ -229,11 +228,12 @@ impl MakeTxArgs {
                 return Ok(());
             }
 
-            let (full_tx, _) = tx_builder.build(&signer).await?;
-            let signed_tx = full_tx.build(&signer).await?;
-            let encoded_tx = hex::encode(signed_tx.encoded_2718());
+            let (tx, _) = tx_builder.build(&signer).await?;
 
-            sh_println!("0x{encoded_tx}")?;
+            let tx = tx.into_inner().build(&EthereumWallet::new(signer)).await?;
+
+            let signed_tx = hex::encode(tx.encoded_2718());
+            sh_println!("0x{signed_tx}")?;
 
             Ok(())
         }

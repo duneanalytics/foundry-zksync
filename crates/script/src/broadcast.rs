@@ -18,7 +18,10 @@ use alloy_zksync::network::{
 use eyre::{Context, Result, bail};
 use forge_verify::provider::VerificationProviderType;
 use foundry_cheatcodes::Wallets;
-use foundry_cli::utils::{has_batch_support, has_different_gas_calc};
+use foundry_cli::{
+    opts::ZkTransactionOpts,
+    utils::{has_batch_support, has_different_gas_calc},
+};
 use foundry_common::{
     TransactionMaybeSigned,
     provider::{
@@ -27,6 +30,7 @@ use foundry_common::{
     shell,
 };
 use foundry_config::Config;
+use foundry_wallets::{WalletSigner, wallet_browser::signer::BrowserSigner};
 use foundry_zksync_core::convert::ConvertH160;
 use futures::{FutureExt, StreamExt, future::join_all, stream::FuturesUnordered};
 use itertools::Itertools;
@@ -70,6 +74,7 @@ pub async fn next_nonce(
 pub enum SendTransactionKind<'a> {
     Unlocked(WithOtherFields<TransactionRequest>),
     Raw(WithOtherFields<TransactionRequest>, &'a EthereumWallet),
+    Browser(WithOtherFields<TransactionRequest>, &'a BrowserSigner),
     Signed(TxEnvelope),
 }
 
@@ -94,7 +99,7 @@ impl<'a> SendTransactionKind<'a> {
             None
         };
 
-        if let Self::Raw(tx, _) | Self::Unlocked(tx) = self {
+        if let Self::Raw(tx, _) | Self::Unlocked(tx) | Self::Browser(tx, _) = self {
             if sequential_broadcast {
                 let from = tx.from.expect("no sender");
 
@@ -147,14 +152,15 @@ impl<'a> SendTransactionKind<'a> {
         provider: Arc<RetryProvider>,
         zk_provider: Arc<RetryProvider<Zksync>>,
         estimate_multiplier: u64,
-        gas_per_pubdata: Option<u64>,
+        zk_tx_opts: ZkTransactionOpts,
     ) -> Result<TxHash> {
-        let pending_tx_hash = match self {
+        match self {
             Self::Unlocked(tx) => {
                 debug!("sending transaction from unlocked account {:?}", tx);
 
                 // Submit the transaction
-                *provider.send_transaction(tx).await?.tx_hash()
+                let pending = provider.send_transaction(tx).await?;
+                Ok(*pending.tx_hash())
             }
             Self::Raw(tx, signer) => {
                 debug!("sending transaction: {:?}", tx);
@@ -171,6 +177,7 @@ impl<'a> SendTransactionKind<'a> {
                             zk_tx_meta.factory_deps.iter().map(Bytes::from_iter).collect(),
                         );
                     }
+
                     if let Some(paymaster_data) = &zk_tx_meta.paymaster_data {
                         zk_tx.set_paymaster_params(
                             alloy_zksync::network::unsigned_tx::eip712::PaymasterParams {
@@ -184,7 +191,7 @@ impl<'a> SendTransactionKind<'a> {
                         &mut zk_tx,
                         &zk_provider,
                         estimate_multiplier,
-                        gas_per_pubdata,
+                        zk_tx_opts.gas_per_pubdata,
                     )
                     .await?;
 
@@ -192,21 +199,29 @@ impl<'a> SendTransactionKind<'a> {
                         alloy_zksync::wallet::ZksyncWallet::new(signer.default_signer());
                     let signed = zk_tx.build(&zk_signer).await?.encoded_2718();
 
-                    *zk_provider.send_raw_transaction(signed.as_ref()).await?.tx_hash()
+                    let pending = zk_provider.send_raw_transaction(signed.as_ref()).await?;
+                    Ok(*pending.tx_hash())
                 } else {
                     let signed = tx.build(signer).await?;
 
                     // Submit the raw transaction
-                    *provider.send_raw_transaction(signed.encoded_2718().as_ref()).await?.tx_hash()
+                    let pending =
+                        provider.send_raw_transaction(signed.encoded_2718().as_ref()).await?;
+                    Ok(*pending.tx_hash())
                 }
             }
             Self::Signed(tx) => {
                 debug!("sending transaction: {:?}", tx);
-                *provider.send_raw_transaction(tx.encoded_2718().as_ref()).await?.tx_hash()
+                let pending = provider.send_raw_transaction(tx.encoded_2718().as_ref()).await?;
+                Ok(*pending.tx_hash())
             }
-        };
+            Self::Browser(tx, signer) => {
+                debug!("sending transaction: {:?}", tx);
 
-        Ok(pending_tx_hash)
+                // Sign and send the transaction via the browser wallet
+                Ok(signer.send_transaction_via_browser(tx.into_inner()).await?)
+            }
+        }
     }
 
     /// Prepares and sends the transaction in one operation.
@@ -222,7 +237,7 @@ impl<'a> SendTransactionKind<'a> {
         is_fixed_gas_limit: bool,
         estimate_via_rpc: bool,
         estimate_multiplier: u64,
-        gas_per_pubdata: Option<u64>,
+        zk_tx_opts: ZkTransactionOpts,
     ) -> Result<TxHash> {
         self.prepare(
             &provider,
@@ -233,7 +248,35 @@ impl<'a> SendTransactionKind<'a> {
         )
         .await?;
 
-        self.send(provider, zk_provider, estimate_multiplier, gas_per_pubdata).await
+        self.send(provider, zk_provider, estimate_multiplier, zk_tx_opts).await
+    }
+}
+
+/// Convenience enum to represent either an Ethereum wallet or a browser signer
+pub enum EitherSigner {
+    Ethereum(EthereumWallet),
+    Browser(BrowserSigner),
+}
+
+impl From<EthereumWallet> for EitherSigner {
+    fn from(wallet: EthereumWallet) -> Self {
+        Self::Ethereum(wallet)
+    }
+}
+
+impl From<WalletSigner> for EitherSigner {
+    fn from(wallet: WalletSigner) -> Self {
+        match wallet {
+            WalletSigner::Browser(wallet) => Self::Browser(wallet),
+            // Convert any other signer to an Ethereum wallet
+            signer => EthereumWallet::new(signer).into(),
+        }
+    }
+}
+
+impl From<BrowserSigner> for EitherSigner {
+    fn from(wallet: BrowserSigner) -> Self {
+        Self::Browser(wallet)
     }
 }
 
@@ -242,7 +285,7 @@ pub enum SendTransactionsKind {
     /// Send via `eth_sendTransaction` and rely on the  `from` address being unlocked.
     Unlocked(AddressHashSet),
     /// Send a signed transaction via `eth_sendRawTransaction`
-    Raw(AddressHashMap<EthereumWallet>),
+    Raw(AddressHashMap<EitherSigner>),
 }
 
 impl SendTransactionsKind {
@@ -263,7 +306,12 @@ impl SendTransactionsKind {
             }
             Self::Raw(wallets) => {
                 if let Some(wallet) = wallets.get(addr) {
-                    Ok(SendTransactionKind::Raw(tx, wallet))
+                    match wallet {
+                        EitherSigner::Ethereum(wallet) => Ok(SendTransactionKind::Raw(tx, wallet)),
+                        EitherSigner::Browser(signer) => {
+                            Ok(SendTransactionKind::Browser(tx, signer))
+                        }
+                    }
                 } else {
                     bail!("No matching signer for {:?} found", addr)
                 }
@@ -357,10 +405,7 @@ impl BundledState {
                 );
             }
 
-            let signers = signers
-                .into_iter()
-                .map(|(addr, signer)| (addr, EthereumWallet::new(signer)))
-                .collect();
+            let signers = signers.into_iter().map(|(addr, signer)| (addr, signer.into())).collect();
 
             SendTransactionsKind::Raw(signers)
         };
@@ -512,7 +557,7 @@ impl BundledState {
                                 let provider = provider.clone();
                                 let zk_provider = zk_provider.clone();
                                 let gas_estimate_multiplier = self.args.gas_estimate_multiplier;
-                                let zk_gas_per_pubdata = self.args.zk_gas_per_pubdata;
+                                let zk_tx_opts = self.args.zk_tx.clone();
                                 async move {
                                     let res = kind
                                         .clone()
@@ -523,7 +568,7 @@ impl BundledState {
                                             *is_fixed_gas_limit,
                                             estimate_via_rpc,
                                             gas_estimate_multiplier,
-                                            zk_gas_per_pubdata,
+                                            zk_tx_opts,
                                         )
                                         .await;
                                     (res, kind, 0, None)
@@ -541,7 +586,7 @@ impl BundledState {
                                 let provider = provider.clone();
                                 let zk_provider = zk_provider.clone();
                                 let gas_estimate_multiplier = self.args.gas_estimate_multiplier;
-                                let zk_gas_per_pubdata = self.args.zk_gas_per_pubdata;
+                                let zk_tx_opts = self.args.zk_tx.clone();
                                 let progress = seq_progress.inner.clone();
                                 buffer.push(Box::pin(async move {
                                     debug!(err=?res, ?attempt, "retrying transaction ");
@@ -556,7 +601,7 @@ impl BundledState {
                                             provider,
                                             zk_provider,
                                             gas_estimate_multiplier,
-                                            zk_gas_per_pubdata,
+                                            zk_tx_opts,
                                         )
                                         .await;
                                     (r, kind, attempt, original_res.or(Some(res)))
@@ -611,8 +656,10 @@ impl BundledState {
                     (acc.0 + gas_used, acc.1 + gas_price, acc.2 + gas_used * gas_price)
                 });
             let paid = format_units(total_paid, 18).unwrap_or_else(|_| "N/A".to_string());
-            let avg_gas_price = format_units(total_gas_price / sequence.receipts.len() as u64, 9)
-                .unwrap_or_else(|_| "N/A".to_string());
+            let avg_gas_price = total_gas_price
+                .checked_div(sequence.receipts.len() as u64)
+                .and_then(|avg| format_units(avg, 9).ok())
+                .unwrap_or_else(|| "N/A".to_string());
 
             let token_symbol = NamedChain::try_from(sequence.chain)
                 .unwrap_or_default()

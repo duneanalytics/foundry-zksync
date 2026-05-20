@@ -1,12 +1,9 @@
 use std::{path::PathBuf, str::FromStr, time::Duration};
 
-use crate::{
-    tx::{self, CastTxBuilder, CastTxSender, SendTxOpts},
-    zksync::ZkTransactionOpts,
-};
+use crate::tx::{self, CastTxBuilder, CastTxSender, SendTxOpts};
 use alloy_eips::Encodable2718;
 use alloy_ens::NameOrAddress;
-use alloy_network::{AnyNetwork, EthereumWallet, NetworkWallet};
+use alloy_network::{AnyNetwork, EthereumWallet, TransactionBuilder};
 use alloy_primitives::TxHash;
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types::TransactionRequest;
@@ -14,7 +11,10 @@ use alloy_serde::WithOtherFields;
 use alloy_signer::Signer;
 use clap::Parser;
 use eyre::{Result, eyre};
-use foundry_cli::{opts::TransactionOpts, utils, utils::LoadConfig};
+use foundry_cli::{
+    opts::{TransactionOpts, ZkTransactionOpts},
+    utils::{self, LoadConfig, get_provider},
+};
 use foundry_wallets::WalletSigner;
 
 mod zksync;
@@ -147,7 +147,7 @@ impl SendTxArgs {
         };
 
         let config = send_tx.eth.load_config()?;
-        let provider = utils::get_provider(&config)?;
+        let provider = get_provider(&config)?;
 
         if let Some(interval) = send_tx.poll_interval {
             provider.client().set_poll_interval(Duration::from_secs(interval))
@@ -199,7 +199,7 @@ impl SendTxArgs {
 
             cast_send(
                 provider,
-                tx.into_inner(),
+                tx.into_inner().into(),
                 send_tx.cast_async,
                 send_tx.sync,
                 send_tx.confirmations,
@@ -242,7 +242,7 @@ impl SendTxArgs {
                 {
                     let (tx_request, _) = builder.build(from).await?;
                     let tx_hash = browser_signer
-                        .send_transaction_via_browser(tx_request.into_inner().inner)
+                        .send_transaction_via_browser(tx_request.into_inner())
                         .await?;
 
                     let provider =
@@ -270,8 +270,7 @@ impl SendTxArgs {
                 if is_tempo {
                     let (ftx, _) = builder.build(&signer).await?;
 
-                    // Sign using NetworkWallet<FoundryNetwork>
-                    let signed_tx = signer.sign_request(ftx).await?;
+                    let signed_tx = ftx.build(&EthereumWallet::new(signer)).await?;
 
                     // Encode and send raw
                     let mut raw_tx = Vec::with_capacity(signed_tx.encode_2718_len());
@@ -283,18 +282,6 @@ impl SendTxArgs {
 
                     if send_tx.cast_async {
                         sh_println!("{tx_hash:#x}")?;
-                    } else if send_tx.sync {
-                        // For sync mode, we already have the hash, just wait for receipt
-                        let receipt = cast
-                            .receipt(
-                                format!("{tx_hash:#x}"),
-                                None,
-                                send_tx.confirmations,
-                                Some(timeout),
-                                false,
-                            )
-                            .await?;
-                        sh_println!("{receipt}")?;
                     } else {
                         let receipt = cast
                             .receipt(
@@ -320,7 +307,7 @@ impl SendTxArgs {
 
                 cast_send(
                     provider,
-                    tx.into_inner(),
+                    tx.into_inner().into(),
                     send_tx.cast_async,
                     send_tx.sync,
                     send_tx.confirmations,
