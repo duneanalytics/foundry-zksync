@@ -13,7 +13,7 @@ use crate::{
     },
     utils::IgnoredTraces,
 };
-use alloy_consensus::BlobTransactionSidecar;
+use alloy_consensus::BlobTransactionSidecarVariant;
 use alloy_evm::eth::EthEvmContext;
 use alloy_primitives::{
     Address, B256, Bytes, Log, TxKind, U256, hex,
@@ -116,16 +116,10 @@ pub trait CheatcodesExecutor {
         None
     }
 
-    fn trace_zksync(
-        &mut self,
-        ccx_state: &mut Cheatcodes,
-        ecx: Ecx,
-        call_traces: Box<dyn std::any::Any>, /* TODO(merge): Should me moved elsewhere,
-                                              * represents `Vec<Call>` */
-    ) {
-        let mut inspector = self.get_inspector(ccx_state);
-        inspector.trace_zksync(ecx, call_traces, false);
-    }
+    /// Marks that the next EVM frame is an "inner context" so that isolation mode does not
+    /// trigger a nested `transact_inner`. `original_origin` is stored for the existing
+    /// inner-context adjustment logic that restores `tx.origin`.
+    fn set_in_inner_context(&mut self, _enabled: bool, _original_origin: Option<Address>) {}
 }
 
 /// Constructs [FoundryEvm] and runs a given closure with it.
@@ -397,7 +391,7 @@ pub struct Cheatcodes {
     pub active_delegations: Vec<SignedAuthorization>,
 
     /// The active EIP-4844 blob that will be attached to the next call.
-    pub active_blob_sidecar: Option<BlobTransactionSidecar>,
+    pub active_blob_sidecar: Option<BlobTransactionSidecarVariant>,
 
     /// The gas price.
     ///
@@ -969,8 +963,8 @@ impl Cheatcodes {
             let bytecode = created_acc.info.code.clone().unwrap_or_default().original_bytes();
             if let Some((index, _)) =
                 self.expected_creates.iter().find_position(|expected_create| {
-                    expected_create.deployer == call.caller
-                        && expected_create.create_scheme.eq(call.scheme.into())
+                    expected_create.deployer == call.caller()
+                        && expected_create.create_scheme.eq(call.scheme().into())
                         && expected_create.bytecode == bytecode
                 })
             {
@@ -1072,6 +1066,12 @@ impl Cheatcodes {
             self.strategy.context.as_mut(),
             call,
         );
+        // `expectRevert`: track max call depth. This is also done in `initialize_interp`, but
+        // precompile calls don't create an interpreter frame so we must also track it here.
+        // The callee executes at `curr_depth + 1`.
+        if let Some(expected) = &mut self.expected_revert {
+            expected.max_depth = max(curr_depth + 1, expected.max_depth);
+        }
 
         // Handle expected calls
 
@@ -1238,8 +1238,9 @@ impl Cheatcodes {
                     let account =
                         ecx.journaled_state.inner.state().get_mut(&broadcast.new_origin).unwrap();
 
-                    // Note(zk): The active delegation and blob sidecar check is in the strategy in
-                    // our codebase.
+                    // Note(zk): The transaction building is delegated to the strategy.
+                    // But we need to check for delegation+blob conflict here since strategy can't
+                    // return CallOutcome.
                     if has_delegation && has_blob_sidecar {
                         let msg = "both delegation and blob are active; `attachBlob` and `attachDelegation` are not compatible";
                         return Some(CallOutcome {
@@ -1950,7 +1951,7 @@ impl Inspector<EthEvmContext<&mut dyn DatabaseExt>> for Cheatcodes {
 
 impl InspectorExt for Cheatcodes {
     fn should_use_create2_factory(&mut self, ecx: Ecx, inputs: &CreateInputs) -> bool {
-        if let CreateScheme::Create2 { .. } = inputs.scheme {
+        if let CreateScheme::Create2 { .. } = inputs.scheme() {
             let depth = ecx.journaled_state.depth();
             let target_depth = if let Some(prank) = &self.get_prank(depth) {
                 prank.depth

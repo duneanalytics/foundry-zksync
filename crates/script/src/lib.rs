@@ -26,7 +26,7 @@ use eyre::{ContextCompat, Result};
 use forge_script_sequence::{AdditionalContract, NestedValue};
 use forge_verify::{RetryArgs, VerifierArgs};
 use foundry_cli::{
-    opts::{BuildOpts, EvmArgs, GlobalArgs},
+    opts::{BuildOpts, EvmArgs, GlobalArgs, ZkTransactionOpts},
     utils::{self, LoadConfig},
 };
 use foundry_common::{
@@ -135,7 +135,7 @@ pub struct ScriptArgs {
     /// Send via `eth_sendTransaction` using the `--sender` argument as sender.
     #[arg(
         long,
-        conflicts_with_all = &["private_key", "private_keys", "ledger", "trezor", "aws"],
+        conflicts_with_all = &["private_key", "private_keys", "ledger", "trezor", "aws", "browser"],
     )]
     pub unlocked: bool,
 
@@ -225,9 +225,9 @@ pub struct ScriptArgs {
     #[command(flatten)]
     pub retry: RetryArgs,
 
-    /// Gas per pubdata
-    #[clap(long = "zk-gas-per-pubdata", value_name = "GAS_PER_PUBDATA")]
-    pub zk_gas_per_pubdata: Option<u64>,
+    /// Only `gas_per_pubdata` is used in the script broadcast path.
+    #[command(flatten)]
+    pub zk_tx: ZkTransactionOpts,
 }
 
 impl ScriptArgs {
@@ -345,9 +345,13 @@ impl ScriptArgs {
         Ok(())
     }
 
-    /// In case the user has loaded *only* one private-key, we can assume that he's using it as the
-    /// `--sender`
+    /// In case the user has loaded *only* one private-key or a single remote signer (e.g.,
+    /// Turnkey), we can assume that they're using it as the `--sender`.
     fn maybe_load_private_key(&self) -> Result<Option<Address>> {
+        if let Some(turnkey_address) = self.wallets.turnkey_address() {
+            return Ok(Some(turnkey_address));
+        }
+
         let maybe_sender = self
             .wallets
             .private_keys()?
@@ -662,6 +666,7 @@ impl ScriptConfig {
         let mut builder = ExecutorBuilder::new()
             .inspectors(|stack| {
                 stack
+                    .logs(self.config.live_logs)
                     .trace_mode(if debug { TraceMode::Debug } else { TraceMode::Call })
                     .networks(self.evm_opts.networks)
                     .create2_deployer(self.evm_opts.create2_deployer)
