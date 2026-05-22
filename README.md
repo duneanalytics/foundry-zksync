@@ -12,7 +12,7 @@ It extends Foundry's capabilities for Ethereum app development to support ZKsync
 - **Latest upstream merge commit:** [`c0fe76c`](https://github.com/foundry-rs/foundry/commit/c0fe76c)
 - **Pinned zksolc version:** `v1.5.15`
 
-> 🐞 **Found an Issue?:** Please report it to help us improve by opening an issue or submitting a pull request.
+> 🐞 **Found an Issue?:** Please report it to help us improve  by opening an issue or submitting a pull request.
 
 ## 📖 User Book
 
